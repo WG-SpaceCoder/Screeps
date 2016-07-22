@@ -21,7 +21,7 @@ export default class UpgraderCreep extends CustomCreep{
             }
         }
         else {
-            this.withdrawEnergyFromColsestStorage();
+            this.withdrawEnergyFromClosestStorage();
         }
     }
 }
