@@ -4,6 +4,7 @@ import Util from 'Util';
 export default class MinerCreep extends CustomCreep{
     constructor(creep){
         super(creep);
+        // return;
         // console.log('We got a new creep ' + this.name);
 
         this.setSource();
@@ -12,7 +13,8 @@ export default class MinerCreep extends CustomCreep{
     }
 
     setContainer(){
-        // console.log('container.length ' + this.container.x);
+        // console.log('container.length ' + this.memory.source);
+        // return;
         if(!('container' in this.memory) || 'progress' in this.memory.container){
             // console.log(this.name + ' looking for container for source ' + this.source.id + ' | ' + Memory.sources.filter((i) => 'container' in i && i.id == this.source.id));
             this.container = Memory.sources.filter((i) => 'container' in i && i.id == this.source.id)[0].container;
@@ -53,7 +55,6 @@ export default class MinerCreep extends CustomCreep{
     work(){
         var container = this.getContainer();
         var source = this.getSource();
-
         if('progress' in container){ //this is not built yet
             if(this.harvest(source) == ERR_NOT_IN_RANGE){
                 this.creepMove(container);

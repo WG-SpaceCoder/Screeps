@@ -15,18 +15,23 @@ export default class CustomSpawn extends Spawn {
         }
     }
 
+    //This is the main logic for all spawners
     work(){
         var minerCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'miner' && creep.room == this.room).length;
         var defenderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'defender' && creep.room == this.room).length;
         var carrierCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'carrier').length;
         var containerCount = this.room.find(FIND_STRUCTURES, {filter: (i) => i.structureType == STRUCTURE_CONTAINER && !('progress' in i)})
         var hostileCreeps = this.room.find(FIND_HOSTILE_CREEPS);
+        // console.log('WORKING SPAWN');
 
-        //IMMEDIATE ACTION REQUIRED - DO NOT CHECK FOR APPROPRIATEPOWER
-        if(this.spawning == null){
+
+        if(this.spawning == null){ //IMMEDIATE ACTION REQUIRED - DO NOT CHECK FOR APPROPRIATEPOWER
             if(hostileCreeps.length > 0 && defenderCount == 0 && this.room.controller.level > 2){
                 console.log('We need to defend room ' + this.room.name + '! As there are ' + hostileCreeps.length + ' hostile creeps!');
                 this.spawnDefender();
+                return;
+            } else if(containerCount == 0){ //Early game builders are better than dedicated miners/carriers. Really just for the first cree though.
+                this.spawnBuilder();
                 return;
             } else if(minerCount == 0){
                 this.spawnMiner();
@@ -36,8 +41,8 @@ export default class CustomSpawn extends Spawn {
                 return;
             }
         }
-        //Non-urgent spawning logic begins here
-        if((this.spawning == null && this.room.energyAvailable == this.room.energyCapacityAvailable) || _.filter(Game.creeps).length == 0){
+
+        if((this.spawning == null && this.room.energyAvailable == this.room.energyCapacityAvailable) || _.filter(Game.creeps).length == 0){ //Non-urgent spawning logic begins here
             // console.log('Checking non urgent spawning logic');
             var builderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'builder').length;
             var upgraderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'upgrader').length;
@@ -51,7 +56,7 @@ export default class CustomSpawn extends Spawn {
             } else if(carrierCount < numberOfSources){
                 this.spawnCarrier();
                 return;
-            } else if(defenderCount < 5){
+            } else if(defenderCount < 5 && this.room.controller.level > 2){
                 this.spawnDefender();
             } else {
                 this.spawnBuilder();
@@ -60,101 +65,68 @@ export default class CustomSpawn extends Spawn {
 
     }
 
-     OLDwork(){
-        if((this.spawning == null && (this.room.find(FIND_MY_STRUCTURES, {filter: (i) => (i.structureType == STRUCTURE_SPAWN || i.structureType == STRUCTURE_EXTENSION) && !Util.isEnergyStorageFull(i)}).length == 0)) || _.filter(Game.creeps).length == 0){
-            for (var role in this.roleList){
-                var roleCount = _.filter(Game.creeps, (creep) => creep.memory.role == this.roleList[role]).length;
-                // console.log('roleCount' + roleCount);
-                if(this.spawning == null && roleCount < this.roleAmount[role]){
-                    if(this.createWorkerCreep(this.roleList[role], [CARRY, WORK, MOVE], 3)){
-                        return;
-                    }
-                }
-            }
-        } else {
-            // console.log('Not spawning because we are waiting for more energy')
-        }
-    }
-
+    //Spawn a Miner
     spawnMiner(){
         this.spawnCustomCreep([CARRY, MOVE, WORK], [WORK], 'miner');
     }
 
+    //Spawn a Carrier
     spawnCarrier(){
         this.spawnCustomCreep([WORK, CARRY, MOVE], [CARRY, MOVE], 'carrier');
     }
 
+    //Spawn a Builder
     spawnBuilder(){
         this.spawnCustomCreep([WORK, CARRY, MOVE], [WORK, CARRY, MOVE], 'builder');
     }
 
+    //Spawn a Upgrader
     spawnUpgrader(){
         this.spawnCustomCreep([WORK, CARRY, MOVE], [WORK, CARRY, MOVE], 'upgrader');
     }
 
+    //Spawn a Defender
     spawnDefender(){
-        // this.spawnCustomCreep([CARRY, MOVE, RANGED_ATTACK], [RANGED_ATTACK, TOUGH], 'defender');
-        this.spawnCustomCreep([CARRY, MOVE, ATTACK, ATTACK, TOUGH, TOUGH, TOUGH, TOUGH], [RANGED_ATTACK, TOUGH], 'defender');
+        if(this.availablePower <= 300){
+            this.spawnCustomCreep([CARRY, MOVE, WORK, ATTACK, TOUGH, TOUGH], [], 'defender');
+        } else { //This is to limit how much I was spending on defenders... too much
+            this.spawnCustomCreep([CARRY, MOVE, WORK, ATTACK, ATTACK, TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, TOUGH, MOVE], [], 'defender');
+        }
     }
 
+    //bodyReqs is the required minimum to form a creep
+    //bodyDynamics will add parts in order until you cannot add anymore parts
+    //role is the string role of hte creep in memory
     spawnCustomCreep(bodyReqs, bodyDynamics, role){
         var availablePower = this.room.energyAvailable;
         var newBody = bodyReqs;
         var totalCost = 0;
-        for(let part in bodyReqs){
+        for(let part in bodyReqs){ //
             availablePower -= BODYPART_COST[bodyReqs[part]];
             totalCost += BODYPART_COST[bodyReqs[part]];
         }
-        for(let part in bodyDynamics){
-            var amountToAdd = Math.floor(availablePower / bodyDynamics.length / BODYPART_COST[bodyDynamics[part]]);
-            if(amountToAdd >= 1){
-                // console.log('Can afford ' + (amountToAdd) + ' new ' + bodyDynamics[part]);
-                newBody = newBody.concat(Array(amountToAdd).fill(bodyDynamics[part]));
-                totalCost += (amountToAdd) * BODYPART_COST[bodyDynamics[part]];
-            } else {
-                // console.log('Cannot afford to add any more parts!');
+        var added = true;
+        while(added){
+            added = false;
+            for(let part in bodyDynamics){
+                if(availablePower >= BODYPART_COST[bodyDynamics[part]]){
+                    newBody = newBody.concat(bodyDynamics[part]);
+                    availablePower -= BODYPART_COST[bodyDynamics[part]];
+                    totalCost += BODYPART_COST[bodyDynamics[part]];
+                    added = true;
+                }
             }
-
         }
 
         newBody = newBody.sort().reverse();
 
-        console.log('Body is ' + newBody + ' Cost: ' + totalCost + ' TotalEnergyAvailable: ' + this.room.energyAvailable);
-
         var newName = this.createCreep(newBody, undefined, {role: role});
         if(newName){
-            console.log('Spawning new ' + role + ' with body ' + newBody + ' named ' + newName);
+            console.log('Spawning new ' + role + ' with body ' + Util.bodyToString(newBody) + ' named ' + newName + ' Cost: ' + totalCost + ' TotalEnergyAvailable: ' + this.room.energyAvailable);
             return true;
         } else {
             console.log('Failed to spawn ' + role + ': ' + newName);
             return false;
-        }
-    }
-
-     createWorkerCreep(role, bodyList, min){
-        // console.log('Attempting to create creep');
-        var body = [];
-        var i = 0;
-        while (this.room.energyAvailable > Util.calculateCosts(body)){
-            if(i > bodyList.length - 1){
-                i = 0;
-                // console.log('i: ', i);
-            }
-            body.push(bodyList[i]);
-            // console.log('Attempting new ', role, ' with body ', body, ' can create ', this.canCreateCreep(body));
-            i+=1;
-        }
-        body.pop();
-        if(body.length >= min){
-            // console.log('Attempting final ', role, ' with body ', body, ' can create ', this.canCreateCreep(body));
-            var newName = this.createCreep(body, undefined, {role: role});
-            if(newName){
-                console.log('Spawning new ' + role + ' with body ' + body + ' named ' + newName);
-                return true;
-            } else {
-                // console.log('Failed to spawn ' + role + ': ' + newName);
-                return false;
-            }
         }
     }
 }
