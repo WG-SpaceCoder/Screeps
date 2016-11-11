@@ -92,6 +92,27 @@ export default class CustomCreep extends Creep {
     //########################################ACTIONS#####################################
     //####################################################################################
 
+    flee() {
+        var range = 15;
+        var hostilesInRange = this.pos.findInRange(FIND_HOSTILE_CREEPS, range);
+
+        var goals = _.map(hostilesInRange, function(creep) {
+            return { pos: creep.pos, range: 1 };
+        });
+
+        if (hostilesInRange.length) {
+            var ret = PathFinder.search(this.pos, goals, {
+                flee: true
+            });
+            console.log('path: ' + JSON.stringify(ret));
+            let pos = ret.path[0];
+            var move = this.move(this.pos.getDirectionTo(pos));
+            this.say('FLEE:' + move);
+            return true;
+        }
+        return false;
+    }
+
     //(param) storage - structure to dump energy into
     //Dumps energy into a given structure
     transferEnergy(storage) {
@@ -105,18 +126,22 @@ export default class CustomCreep extends Creep {
 
     //A customized version of the inherited creep.moveTo() that includes logging and hopefully some cpu savings
     //NOTE: this should not be used for attackers as they will not path through walls
-    creepMove(destination) {
-        var moveCode = this.moveTo(destination, {
-            reusePath: 10
-        });
+    creepMove(destination, opts) {
+        PathFinder.use(true);
+        var moveCode = this.moveTo(destination, _.merge({
+            reusePath: 10,
+            plainCost: 2,
+            swampCost: 4
+        }), opts);
         // var moveCode = this.moveTo(destination)
 
         if (moveCode == ERR_NO_PATH || moveCode == ERR_NOT_FOUND) {
-            moveCode = this.moveTo(destination)
+            moveCode = this.moveTo(destination, opts);
         }
         if (moveCode != 0 && moveCode != -11) {
             // console.log('Creep ' + this.name + ' was unable to move. ERR: ' + moveCode);
         }
+        return moveCode;
     }
 
     //When you just don't know what the heck to do with a creep... you let em dance?
@@ -131,6 +156,8 @@ export default class CustomCreep extends Creep {
         this.attack(target);
         this.rangedAttack(target);
         this.moveTo(target, { ignoreDestructibleStructures: true });
+        this.attack(target);
+        this.rangedAttack(target);
     }
 
     //Looks for the closest container and tries to withdraw energy
@@ -187,7 +214,7 @@ export default class CustomCreep extends Creep {
         }
     }
 
-    tryToConstruct2(roomName) {
+    tryToConstruct(roomName) {
         if (('controller' in Game.rooms[roomName]) && Game.rooms[roomName].controller.my) {
             if (this.tryToRepair(roomName)) {
                 return true;
@@ -248,55 +275,55 @@ export default class CustomCreep extends Creep {
 
     //Tries to either repair existing structures or build new structures based on a prioritised list
     //Attempts to store the structure in memory to reduce cpu - THIS NEEDS TO BE DONE FOR BUILDING AS WELL YOU LAZY SCRUB
-    tryToConstruct() {
-        var importantStruct = Util.getMostImportantStructureToBuild();
-        if (importantStruct != null) {
-            // console.log('Builder ' + this.name + ' needs to build ' + importantStruct);
-            if (this.build(importantStruct) == ERR_NOT_IN_RANGE) {
-                this.creepMove(importantStruct);
-            }
-            return true;
-        }
-        var priorityList = [STRUCTURE_SPAWN, STRUCTURE_TOWER, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER, STRUCTURE_WALL, STRUCTURE_RAMPART, STRUCTURE_ROAD, STRUCTURE_CONTROLLER];
-        //Try to build new things first
-        for (let structure in priorityList) {
-            var closestConstructionSite = this.pos.findClosestByRange(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType == priorityList[structure] });
-            if (closestConstructionSite != null) {
-                if (this.build(closestConstructionSite) == ERR_NOT_IN_RANGE) {
-                    this.creepMove(closestConstructionSite);
-                }
-                return true;
-            }
-        }
-        //then try to repair from memory
-        var toRepair = Game.getObjectById(this.memory.toRepair);
-        if (toRepair != null) {
-            if ((toRepair.structureType == STRUCTURE_WALL || toRepair.structureType == STRUCTURE_RAMPART) ? (toRepair.hits < 5000 && toRepair.hits != toRepair.hitsMax) : (toRepair.hitsMax - toRepair.hits)) {
-                // console.log('Repairing ' + toRepair + ' based on Memory! ' + (toRepair.structureType == STRUCTURE_WALL), (toRepair.hits < 1000), toRepair.hits);
-                if (this.repair(toRepair) == ERR_NOT_IN_RANGE) {
-                    this.creepMove(toRepair);
-                }
-                this.memory.doing = 'Repairing ' + toRepair;
-                return true;
-            }
-        }
-        //then try to repair not from memory
-        for (let structure in priorityList) {
-            var closestConstructionSite = this.pos.findClosestByRange(FIND_STRUCTURES, { filter: (i) => (i.structureType == priorityList[structure]) && ((i.structureType == STRUCTURE_WALL || i.structureType == STRUCTURE_RAMPART) ? (i.hits < 2000 && i.hits != i.hitsMax) : (i.hits / i.hitsMax < 0.50)) });
-            if (closestConstructionSite != null) {
-                // console.log(this.name + ' needs to repair ' + closestConstructionSite);
-                this.memory.toRepair = closestConstructionSite.id;
-                if (this.repair(closestConstructionSite) == ERR_NOT_IN_RANGE) {
-                    this.creepMove(closestConstructionSite);
-                }
-                this.memory.doing = 'Repairing ' + closestConstructionSite;
-                return true;
-            } else {
-                // console.log('We don\'t have any ' + priorityList[structure] + ' to repair');
-            }
-        }
-        return false;
-    }
+    // tryToConstruct() {
+    //     var importantStruct = Util.getMostImportantStructureToBuild();
+    //     if (importantStruct != null) {
+    //         // console.log('Builder ' + this.name + ' needs to build ' + importantStruct);
+    //         if (this.build(importantStruct) == ERR_NOT_IN_RANGE) {
+    //             this.creepMove(importantStruct);
+    //         }
+    //         return true;
+    //     }
+    //     var priorityList = [STRUCTURE_SPAWN, STRUCTURE_TOWER, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER, STRUCTURE_WALL, STRUCTURE_RAMPART, STRUCTURE_ROAD, STRUCTURE_CONTROLLER];
+    //     //Try to build new things first
+    //     for (let structure in priorityList) {
+    //         var closestConstructionSite = this.pos.findClosestByRange(FIND_CONSTRUCTION_SITES, { filter: (i) => i.structureType == priorityList[structure] });
+    //         if (closestConstructionSite != null) {
+    //             if (this.build(closestConstructionSite) == ERR_NOT_IN_RANGE) {
+    //                 this.creepMove(closestConstructionSite);
+    //             }
+    //             return true;
+    //         }
+    //     }
+    //     //then try to repair from memory
+    //     var toRepair = Game.getObjectById(this.memory.toRepair);
+    //     if (toRepair != null) {
+    //         if ((toRepair.structureType == STRUCTURE_WALL || toRepair.structureType == STRUCTURE_RAMPART) ? (toRepair.hits < 5000 && toRepair.hits != toRepair.hitsMax) : (toRepair.hitsMax - toRepair.hits)) {
+    //             // console.log('Repairing ' + toRepair + ' based on Memory! ' + (toRepair.structureType == STRUCTURE_WALL), (toRepair.hits < 1000), toRepair.hits);
+    //             if (this.repair(toRepair) == ERR_NOT_IN_RANGE) {
+    //                 this.creepMove(toRepair);
+    //             }
+    //             this.memory.doing = 'Repairing ' + toRepair;
+    //             return true;
+    //         }
+    //     }
+    //     //then try to repair not from memory
+    //     for (let structure in priorityList) {
+    //         var closestConstructionSite = this.pos.findClosestByRange(FIND_STRUCTURES, { filter: (i) => (i.structureType == priorityList[structure]) && ((i.structureType == STRUCTURE_WALL || i.structureType == STRUCTURE_RAMPART) ? (i.hits < 2000 && i.hits != i.hitsMax) : (i.hits / i.hitsMax < 0.50)) });
+    //         if (closestConstructionSite != null) {
+    //             // console.log(this.name + ' needs to repair ' + closestConstructionSite);
+    //             this.memory.toRepair = closestConstructionSite.id;
+    //             if (this.repair(closestConstructionSite) == ERR_NOT_IN_RANGE) {
+    //                 this.creepMove(closestConstructionSite);
+    //             }
+    //             this.memory.doing = 'Repairing ' + closestConstructionSite;
+    //             return true;
+    //         } else {
+    //             // console.log('We don\'t have any ' + priorityList[structure] + ' to repair');
+    //         }
+    //     }
+    //     return false;
+    // }
 
     //####################################################################################
     //########################################INFO########################################
@@ -408,5 +435,19 @@ export default class CustomCreep extends Creep {
         if (oldState != this.memory.state) {
             this.say(this.memory.state == 'gathering' ? 'gathering' : roleText[this.memory.role]);
         }
+    }
+
+    setBuildSpawn() {
+        for (var roomName in Game.rooms) {
+            var actualRoom = Game.rooms[roomName];
+            if (actualRoom != undefined && actualRoom.find(FIND_MY_CONSTRUCTION_SITES, { filter: (struct) => struct.structureType == STRUCTURE_SPAWN }).length) {
+                var spawn = actualRoom.find(FIND_MY_CONSTRUCTION_SITES, { filter: (struct) => struct.structureType == STRUCTURE_SPAWN })[0];
+                this.memory.buildSpawn = spawn.id;
+                this.creepMove(spawn, { range: 3 });
+                this.build(spawn);
+                return true;
+            }
+        }
+        return false;
     }
 }

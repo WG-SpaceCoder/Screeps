@@ -16,8 +16,8 @@ export default class UpgraderCreep extends CustomCreep {
         }
 
         if (this.memory.upgrading) {
-            if (this.upgradeController(this.room.controller) == ERR_NOT_IN_RANGE) {
-                this.creepMove(this.room.controller);
+            if (this.upgradeController(Game.rooms[this.memory.spawnRoom].controller) == ERR_NOT_IN_RANGE) {
+                this.creepMove(Game.rooms[this.memory.spawnRoom].controller);
             }
         } else {
             this.withdrawEnergyFromClosestStorage();

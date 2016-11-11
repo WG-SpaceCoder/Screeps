@@ -31,12 +31,12 @@ export default class BuilderCreep extends CustomCreep {
                     this.creepMove(this.room.controller);
                 }
             } else {
-                if (this.tryToConstruct2(this.room.name)) {
+                if (this.tryToConstruct(this.room.name)) {
                     // console.log(this.name + ' is going to build in his home room');
                     return;
                 } else {
                     for (let roomName in Game.rooms) {
-                        if (this.tryToConstruct2(roomName)) {
+                        if (this.tryToConstruct(roomName)) {
                             // console.log(this.name + ' is going to build in a remote room ' + roomName);
                             return;
                         }

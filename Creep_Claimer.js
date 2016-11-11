@@ -5,6 +5,11 @@ export default class ClaimerCreep extends CustomCreep {
     constructor(creep) {
         super(creep);
         // console.log('We got a new creep ' + this.name);
+
+        if (this.flee()) {
+            return;
+        }
+
         this.work();
     }
 
@@ -22,13 +27,11 @@ export default class ClaimerCreep extends CustomCreep {
             this.memory.roomToClaim = roomToClaim[0];
         }
         if (this.memory.roomToClaim != '') {
-            if (this.room.name != this.memory.roomToClaim) {
-                // console.log('setting2 roomsToClaim to ' + roomToReserve[0]);
+            if (Game.rooms[this.memory.roomToClaim] == undefined) {
                 this.creepMove(new RoomPosition(25, 25, this.memory.roomToClaim));
             } else {
-                if (this.claimController(this.room.controller) == ERR_NOT_IN_RANGE) {
-                    this.creepMove(this.room.controller);
-                }
+                this.creepMove(Game.rooms[this.memory.roomToClaim].controller);
+                this.claimController(Game.rooms[this.memory.roomToClaim].controller);
             }
             return;
         }
@@ -44,8 +47,11 @@ export default class ClaimerCreep extends CustomCreep {
                 // console.log('setting2 roomsToReserve to ' + this.memory.roomToReserve);
                 this.creepMove(new RoomPosition(25, 25, this.memory.roomToReserve));
             } else {
-                if (this.reserveController(this.room.controller) == ERR_NOT_IN_RANGE) {
+                var reserveTry = this.reserveController(this.room.controller);
+                if (reserveTry == ERR_NOT_IN_RANGE) {
                     this.creepMove(this.room.controller);
+                } else if (reserveTry != OK) {
+                    console.log(this.name + ' failed to reserve: ' + reserveTry);
                 }
             }
             return;

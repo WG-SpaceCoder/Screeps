@@ -9,6 +9,7 @@ export function loop() {
     if (!('bucket' in Game.cpu) || Game.cpu.bucket > 1000) {
         let gameMaster = new GameMaster();
     } else {
-        console.log('Game.spu.bucket:', Game.cpu.bucket);
+        // console.log('Game.cpu.bucket:', Game.cpu.bucket);
+        let gameMaster = new GameMaster();
     }
 }

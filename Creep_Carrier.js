@@ -4,8 +4,11 @@ import Util from 'Util';
 export default class CarrierCreep extends CustomCreep {
     constructor(creep) {
         super(creep);
-        // this.say(this.memory.assignedRoom);
+        // this.say(this.memory.spawnRoom);
         // console.log('We got a new creep ' + this.name);
+        if (this.flee()) {
+            return;
+        }
         this.work();
     }
 
@@ -15,8 +18,8 @@ export default class CarrierCreep extends CustomCreep {
         if (!('storage' in this.memory)) {
             this.memory.storage = '';
         }
-        if (!('assignedRoom' in this.memory)) {
-            this.memory.assignedRoom = '';
+        if (!('spawnRoom' in this.memory)) {
+            this.memory.spawnRoom = '';
         }
 
         if (this.memory.state == 'gathering') {
@@ -28,9 +31,19 @@ export default class CarrierCreep extends CustomCreep {
             //     }
             //     return;
             // }
-
-            // this.withdrawEnergyFromClosestMinerStorage();
-            if (this.memory.storage.length > 0 && _.sum(Game.getObjectById(this.memory.storage).store) > this.carryCapacity) {
+            if (this.memory.drop != undefined && this.memory.drop.length && Game.getObjectById(this.memory.drop) != undefined) {
+                var drop = Game.getObjectById(this.memory.drop);
+                this.creepMove(drop);
+                if (this.pickup(drop) == OK) {
+                    // console.log(this.name + ' cleaned up their room.');
+                    if (Game.getObjectById(this.memory.drop) == undefined) {
+                        this.memory.drop = '';
+                    }
+                }
+                this.say('drop');
+                return;
+            }
+            if (this.memory.storage.length > 0 && Game.getObjectById(this.memory.storage) != undefined && _.sum(Game.getObjectById(this.memory.storage).store) > this.carryCapacity) {
                 this.creepMove(Game.getObjectById(this.memory.storage));
                 this.withdraw(Game.getObjectById(this.memory.storage), RESOURCE_ENERGY)
 
@@ -45,17 +58,29 @@ export default class CarrierCreep extends CustomCreep {
         } else {
             this.memory.storage = '';
             var priorityList = [STRUCTURE_EXTENSION, STRUCTURE_SPAWN, STRUCTURE_TOWER, STRUCTURE_CONTAINER];
-            if (('assignedRoom' in this.memory) && this.memory.assignedRoom.length > 0) {
+            if (('spawnRoom' in this.memory) && this.memory.spawnRoom.length > 0) {
                 var tmpObj = {};
-                tmpObj[this.memory.assignedRoom] = Game.rooms[this.memory.assignedRoom];
+                tmpObj[this.memory.spawnRoom] = Game.rooms[this.memory.spawnRoom];
                 if (this.carryToRooms(tmpObj)) {
                     return;
                 }
             }
-            if (this.carryToRooms(Game.rooms)) {
-                return;
+            // if (this.carryToRooms(Game.rooms)) {
+            //     return;
+            // }
+            if (!this.tryToConstruct(this.memory.spawnRoom)) {
+                // console.log(this.name + ' could not find anything to repair');
+                if (!this.setBuildSpawn()) {
+                    var upgradeTry = this.upgradeController(Game.rooms[this.memory.spawnRoom].controller);
+                    // this.say('upgrade ' + upgradeTry);
+                    if (upgradeTry == ERR_NOT_IN_RANGE) {
+                        // console.log(this.name + ' could not reach the controller in ' + this.memory.spawnRoom);
+                        this.creepMove(Game.rooms[this.memory.spawnRoom].controller);
+                    } else if (upgradeTry != OK) {
+                        console.log(this.name + ' failed to upgrade conrtoller in room ' + this.room.name + ' err: ' + upgradeTry);
+                    }
+                }
             }
-            this.buildWork(); //If there is really nothing for the carrier to do it will act as a builder (this almost never happens)
         }
     }
 
@@ -194,7 +219,7 @@ export default class CarrierCreep extends CustomCreep {
 
     findClosestMinerStorage() {
         var minerContainerStr = '';
-        var creepRoom = this.memory.assignedRoom;
+        var creepRoom = this.memory.spawnRoom;
         if (creepRoom == '') {
             creepRoom = this.room.name
         }
@@ -203,7 +228,7 @@ export default class CarrierCreep extends CustomCreep {
                 minerContainerStr += Memory.sources[source].container.x.toString() + Memory.sources[source].container.y.toString() + ' ';
             }
         }
-        // console.log('assignedRoom: ' + this.memory.assignedRoom, this.name);
+        // console.log('spawnRoom: ' + this.memory.spawnRoom, this.name);
         var storageStructures = Game.rooms[creepRoom].find(FIND_STRUCTURES, {
             filter: (i) => i.structureType == STRUCTURE_CONTAINER && minerContainerStr.indexOf(i.pos.x.toString() + i.pos.y.toString()) != -1
         });

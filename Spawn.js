@@ -13,85 +13,64 @@ export default class CustomSpawn extends Spawn {
 
     //This is the main logic for all spawners
     work() {
-        var minerCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'miner').length;
+        var upgraderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'upgrader' && creep.room == this.room).length;
         var defenderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'defender' && ('spawnRoom' in creep.memory) && creep.memory.spawnRoom == this.room.name).length;
-        var carrierCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'carrier').length;
-        var carrierThisRoomCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'carrier' && ('assignedRoom' in creep.memory) && creep.memory.assignedRoom == this.room.name).length;
-        var builderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'builder' && ('spawnRoom' in creep.memory) && creep.memory.spawnRoom == this.room.name).length;
-        var scoutCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'scout' && creep.room == this.room).length;
-        var containerCount = this.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType == STRUCTURE_CONTAINER && !('progress' in i) });
         var hostileCreeps = this.room.find(FIND_HOSTILE_CREEPS);
-        var totalRoomCreepCount = _.filter(Game.creeps, (creep) => creep.room == this.room).length;
-
-        // if (this.room.controller.level <= 2) {
-        //     this.spawnCarrier();
-        // }
+        var roomsToScout = Util.roomsToScout(this.room.name);
+        var sourcesWithoutHarvesters = Util.getSurroundingSourcesWithoutHarvesters(this.room.name);
+        var claimerCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'claimer' && creep.room == this.room).length;
+        var carrierCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'carrier' && creep.memory.spawnRoom == this.room.name).length;
+        var roomsToClaim = Util.roomsToClaim();
+        var constructionSpawns = Util.getContructionSpawns(3);
+        // console.log('roomsToClaim:' + roomsToClaim);
 
         if (this.spawning == null) { //IMMEDIATE ACTION REQUIRED - DO NOT CHECK FOR APPROPRIATEPOWER
-            if (hostileCreeps.length > 0 && defenderCount == 0 && this.room.controller.level > 2) {
-                console.log('We need to defend room ' + this.room.name + '! As there are ' + hostileCreeps.length + ' hostile creeps!');
+            if (Memory.roomBeingAttacked.length && defenderCount < 1 && this.room.controller.level > 2) {
+                // console.log('We need to defend room ' + this.room.name + '! As there are ' + hostileCreeps.length + ' hostile creeps!');
                 this.spawnDefender();
-                return;
-            } else if (carrierThisRoomCount == 0 || containerCount == 0 && carrierCount < 3) { //Early game builders are better than dedicated miners/carriers. Really just for the first cree though.
+            } else if (carrierCount < 3) { //Early game builders are better than dedicated miners/carriers. Really just for the first cree though.
                 this.spawnCarrier();
-                return;
-            } else if (minerCount == 0) {
-                this.spawnMiner();
-                return;
-            } else if (carrierCount == 0) {
-                this.spawnCarrier();
-                return;
             } else if (upgraderCount == 0) {
                 this.spawnUpgrader();
-            }
-        }
-
-        // if (this.spawnFromMemory()) {
-        //     return;
-        // }
-
-        if ((this.spawning == null && this.room.energyAvailable == this.room.energyCapacityAvailable) || _.filter(Game.creeps).length == 0) { //Non-urgent spawning logic begins here
-            // console.log('Checking non urgent spawning logic');
-            var upgraderCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'upgrader' && creep.room == this.room).length;
-            var numberOfSources = Memory.sources.length;
-            var spaceInContainers = this.room.find(FIND_STRUCTURES, { filter: (i) => i.structureType == STRUCTURE_CONTAINER && !Util.isEnergyStorageFull(i) }).length > 0;
-            var claimerCount = _.filter(Game.creeps, (creep) => creep.memory.role == 'claimer' && creep.room == this.room).length;
-            var roomsToScout = Util.roomsToScout()
-                // console.log('Util.roomsToClaim().length ' + Util.roomsToClaim().length);
-                // console.log('Util.roomsToScout().length ', Util.roomsToScout().length, Util.roomsToScout());
-            if (builderCount == 0) {
-                this.spawnBuilder();
-            } else if (upgraderCount == 0) {
-                this.spawnUpgrader();
-            } else if (roomsToScout.length > 0) {
-                this.spawnScout(roomsToScout[0]);
-            } else if (carrierCount < numberOfSources || minerCount < numberOfSources) {
-                if (carrierCount < minerCount) {
-                    this.spawnCarrier();
-                } else {
-                    this.spawnMiner();
-                }
-            } else if (defenderCount < 1 && this.room.controller.level > 2) {
-                this.spawnDefender();
-            } else if (builderCount < 2) {
-                this.spawnBuilder();
-            } else if (upgraderCount < 2) {
-                this.spawnUpgrader();
-            } else if (carrierThisRoomCount < 3) {
+            } else if (carrierCount < Util.getSurroundingSources(this.room.name).length) {
                 this.spawnCarrier();
-            } else if (claimerCount == 0 && Util.roomsToClaim().length > 0 && this.room.energyAvailable > 650) {
-                this.spawnClaimer();
-                // } else if (!spaceInContainers) {
+            } else if (sourcesWithoutHarvesters.length) {
+                // console.log('sourcesWithoutHarvesters: ' + sourcesWithoutHarvesters);
+                this.spawnHarvester(sourcesWithoutHarvesters[0]);
+                // } else if (builderCount == 0 && false) {
                 //     this.spawnBuilder();
+                // } else if (minerCount < _.ceil(sourceCount * 1.2)) {
+                //     this.spawnMiner();
+            } else if (roomsToScout.length && this.room.controller.level > 2) {
+                // console.log('RoomsToScout = ' + roomsToScout.length);
+                this.spawnScout(roomsToScout[0]);
+                // } else if (defenderCount < 1 && this.room.controller.level > 2) {
+                //     this.spawnDefender();
+            } else if (Util.roomsToClaim().length) {
+                this.spawnClaimer();
+            } else if (constructionSpawns.length) {
+                this.spawnSpawnBuilder(constructionSpawns[0]);
             } else {
                 this.spawnFromMemory();
             }
         }
+
     }
 
     //Spawn a Miner
     spawnMiner() {
-        this.spawnCustomCreep([CARRY, MOVE, WORK], [WORK], 'miner', 750);
+        this.spawnCustomCreep([CARRY, MOVE, WORK], [CARRY, WORK, MOVE, MOVE], 'miner', undefined, { assignedRoom: this.room.name }); //1450
+    }
+
+    //Spawn a SpawnBuilder
+    spawnSpawnBuilder(spawn) {
+        this.spawnCustomCreep([CARRY, MOVE, WORK], [CARRY, MOVE, WORK], 'spawnBuilder', undefined, { spawn: spawn }); //1450
+    }
+
+    //Spawn a Harvester
+    spawnHarvester(source) {
+        // console.log('spawning harvester: ' + source);
+        this.spawnCustomCreep([CARRY, MOVE, MOVE, WORK], [WORK], 'harvester', 850, { sourceID: source, spawnRoom: this.room.name }); //1450
     }
 
     //Spawn a Scout
@@ -101,17 +80,17 @@ export default class CustomSpawn extends Spawn {
 
     //Spawn a Carrier
     spawnCarrier() {
-        this.spawnCustomCreep([WORK, CARRY, MOVE], [CARRY, MOVE], 'carrier', 1500);
+        this.spawnCustomCreep([WORK, CARRY, MOVE], [CARRY, MOVE], 'carrier', 1500, { spawnRoom: this.room.name });
     }
 
     //Spawn a Builder
     spawnBuilder() {
-        this.spawnCustomCreep([WORK, CARRY, MOVE], [WORK, CARRY, MOVE], 'builder', 1000, { spawnRoom: this.room.name });
+        this.spawnCustomCreep([WORK, CARRY, MOVE], [CARRY, MOVE, WORK], 'builder', undefined, { spawnRoom: this.room.name });
     }
 
     //Spawn a Upgrader
     spawnUpgrader() {
-        this.spawnCustomCreep([WORK, CARRY, MOVE], [WORK, CARRY, MOVE], 'upgrader', 1000);
+        this.spawnCustomCreep([WORK, CARRY, MOVE], [], 'upgrader', undefined, { spawnRoom: this.room.name });
     }
 
     //Spawn a Claimer
@@ -122,9 +101,9 @@ export default class CustomSpawn extends Spawn {
     //Spawn a Defender
     spawnDefender() {
         if (this.availablePower <= 300) {
-            this.spawnCustomCreep([MOVE, ATTACK, TOUGH, TOUGH], [], 'defender', { spawnRoom: this.room.name });
+            this.spawnCustomCreep([MOVE, ATTACK, TOUGH, TOUGH], [], 'defender', undefined, { spawnRoom: this.room.name });
         } else { //This is to limit how much I was spending on defenders... too much
-            this.spawnCustomCreep([MOVE, RANGED_ATTACK, ATTACK, TOUGH], [MOVE, ATTACK, TOUGH], 'defender', { spawnRoom: this.room.name });
+            this.spawnCustomCreep([MOVE, RANGED_ATTACK, ATTACK, TOUGH], [MOVE, ATTACK, TOUGH, MOVE], 'defender', undefined, { spawnRoom: this.room.name });
         }
     }
 
@@ -167,15 +146,21 @@ export default class CustomSpawn extends Spawn {
             }
         }
 
+        if (newBody.length > MAX_CREEP_SIZE) {
+            newBody = newBody.slice(0, MAX_CREEP_SIZE);
+        }
+
         newBody = newBody.sort().reverse();
+        // console.log('pre-ops: ' + JSON.stringify(ops));
         ops = Object.assign({ role: role }, ops);
+        // console.log('post-ops: ' + JSON.stringify(ops));
 
         var newName = this.createCreep(newBody, undefined, ops);
-        if (newName) {
-            console.log(this.name + ' is spawning a ' + role + ' with body [' + Util.bodyToString(newBody) + '] named ' + newName + ' Cost: ' + totalCost + '/' + this.room.energyAvailable + ' in room ' + this.room.name);
+        if (isNaN(newName)) {
+            // console.log(this.name + ' in ' + this.room.name + ' is spawning a ' + role + ' with body [' + Util.bodyToString(newBody) + '] named ' + newName + ' Cost: ' + totalCost + '/' + this.room.energyAvailable + ' in room ' + this.room.name + ' with ops ' + JSON.stringify(ops));
             return true;
         } else {
-            console.log('Failed to spawn ' + role + ': ' + newName);
+            // console.log('Failed to spawn ' + role + ': ' + newName);
             return false;
         }
     }

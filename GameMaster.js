@@ -9,20 +9,21 @@ import Defender from 'Creep_Defender';
 import Carrier from 'Creep_Carrier';
 import Claimer from 'Creep_Claimer';
 import Scout from 'Creep_Scout';
+import SpawnBuilder from 'Creep_Spawn_Builder';
 
 export default class GameMaster {
     constructor() {
+        // console.log('Tick');
+        PathFinder.use(true);
         this.workMemory();
-        if (Game.cpu.bucket > 5000) { this.workRooms(); }
+        if (Game.cpu.bucket > 5000 || Game.cpu.bucket == undefined) {
+            this.workRooms();
+            this.workCreeps();
+        }
         this.clean()
+        this.workClaim();
         var tmpCPU = Game.cpu.getUsed();
-        this.workCreeps();
-        // console.log('Creeps used ' + Math.round(Game.cpu.getUsed() - tmpCPU) + ' CPU in room ' + this.name);
-        // this.workSpawns();
-        Memory.roomsToClearWalls = [];
-        Memory.roomsToHarvest = ['E56N57', 'E56N59', 'E55N59', 'E57N57', 'E57N59', 'E59N59', 'E54N58'];
-        Memory.roomsToAttack = [];
-        Memory.roomsToClaim = [];
+
     }
 
     //####################################################################################
@@ -32,50 +33,68 @@ export default class GameMaster {
     workMemory() {
         this.setRoomsBeingAttacked();
         this.setSpawnQueue();
+        if (Memory.roomBeingAttacked == undefined) {
+            Memory.roomBeingAttacked = '';
+        }
+        if (Memory.roomsToAttack == undefined) {
+            Memory.roomsToAttack = [];
+        }
+        if (Memory.roomsToClearWalls == undefined) {
+            Memory.roomsToClearWalls = [];
+        }
+    }
+
+    workClaim() {
+        if (Util.canClaimMoreRooms()) {
+            Util.setClaimRoom();
+        }
     }
 
     workCreeps() {
         for (let creep in Game.creeps) {
             if (!Game.creeps[creep].spawning) {
-                try {
-                    var tmpCPU = Game.cpu.getUsed();
-                    switch (Game.creeps[creep].memory.role) {
-                        case 'harvester':
-                            var test = new Harvester(Game.creeps[creep].id);
-                            break;
-                        case 'builder':
-                            var test = new Builder(Game.creeps[creep].id);
-                            break;
-                        case 'upgrader':
-                            var test = new Upgrader(Game.creeps[creep].id);
-                            break;
-                        case 'miner':
-                            var test = new Miner(Game.creeps[creep].id);
-                            break;
-                        case 'defender':
-                            var test = new Defender(Game.creeps[creep].id);
-                            break;
-                        case 'carrier':
-                            var test = new Carrier(Game.creeps[creep].id);
-                            break;
-                        case 'claimer':
-                            var test = new Claimer(Game.creeps[creep].id);
-                            break;
-                        case 'scout':
-                            var test = new Scout(Game.creeps[creep].id);
-                            break;
-                        default:
-                            // console.log('Default screep role???????');
-                            break;
-                    }
-                    var usedCpu = Math.round(Game.cpu.getUsed() - tmpCPU);
-                    if (usedCpu > 20) {
-                        console.log(Game.creeps[creep].memory.role, Game.creeps[creep].name + ' used ' + usedCpu + ' CPU in room ' + Game.creeps[creep].room.name);
-                    }
-                } catch (err) {
-                    console.log(creep, err, JSON.stringify(creep));
-                    // console.log(JSON.stringify(creep));
+                // try {
+                var tmpCPU = Game.cpu.getUsed();
+                switch (Game.creeps[creep].memory.role) {
+                    case 'harvester':
+                        var test = new Harvester(Game.creeps[creep].id);
+                        break;
+                    case 'builder':
+                        var test = new Builder(Game.creeps[creep].id);
+                        break;
+                    case 'upgrader':
+                        var test = new Upgrader(Game.creeps[creep].id);
+                        break;
+                    case 'miner':
+                        var test = new Miner(Game.creeps[creep].id);
+                        break;
+                    case 'defender':
+                        var test = new Defender(Game.creeps[creep].id);
+                        break;
+                    case 'carrier':
+                        var test = new Carrier(Game.creeps[creep].id);
+                        break;
+                    case 'claimer':
+                        var test = new Claimer(Game.creeps[creep].id);
+                        break;
+                    case 'scout':
+                        var test = new Scout(Game.creeps[creep].id);
+                        break;
+                    case 'spawnBuilder':
+                        var test = new SpawnBuilder(Game.creeps[creep].id);
+                        break;
+                    default:
+                        // console.log('Default screep role???????');
+                        break;
                 }
+                var usedCpu = Math.round(Game.cpu.getUsed() - tmpCPU);
+                if (usedCpu > 20) {
+                    console.log(Game.creeps[creep].memory.role, Game.creeps[creep].name + ' used ' + usedCpu + ' CPU in room ' + Game.creeps[creep].room.name);
+                }
+                // } catch (err) {
+                //     console.log(creep, err, JSON.stringify(creep));
+                //     // console.log(JSON.stringify(creep));
+                // }
             }
         }
     }

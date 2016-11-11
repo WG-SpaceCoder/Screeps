@@ -28,7 +28,7 @@ export default class DefenderCreep extends CustomCreep {
         var roomToAttack = '';
 
         //Figure out what room to attack/defend
-        if (Memory.roomBeingAttacked.length > 0) {
+        if (Memory.roomBeingAttacked.length > 0 && Game.rooms[Memory.roomBeingAttacked] != undefined) {
             roomToAttack = Memory.roomBeingAttacked;
         } else if (Memory.roomsToAttack.length > 0) {
             for (let room in Memory.roomsToAttack) {
@@ -36,6 +36,9 @@ export default class DefenderCreep extends CustomCreep {
                     roomToAttack = Memory.roomsToAttack[room];
                 }
             }
+        }
+        if (Memory.roomBeingAttacked.length > 0 && Game.rooms[Memory.roomBeingAttacked] == undefined) {
+            roomToAttack = Memory.roomBeingAttacked;
         }
 
         //Attack/defend logic
@@ -45,7 +48,7 @@ export default class DefenderCreep extends CustomCreep {
                 for (let struct in priorityListToAttack) {
                     var closestTarget = this.pos.findClosestByRange(FIND_STRUCTURES, { filter: (i) => i.structureType == priorityListToAttack[struct] && !i.my });
                     if (closestTarget != null) {
-                        console.log(this.name + ' is attacking ' + closestTarget);
+                        // console.log(this.name + ' is attacking ' + closestTarget);
                         this.generalAttack(closestTarget);
                         return;
                     }
@@ -54,17 +57,17 @@ export default class DefenderCreep extends CustomCreep {
         }
 
         if (closestHostile != null) { //If there is a hostile creep we need to kill it
-            console.log(this.name + ' is attacking ' + closestHostile);
+            // console.log(this.name + ' is attacking ' + closestHostile);
             this.generalAttack(closestHostile);
             return;
         }
 
         if (roomToAttack.length > 0 && this.room.name != roomToAttack) { //Need to move to room to attack
-            console.log(this.name + ' need to move to ' + roomToAttack + ' to attack!');
-            if (this.moveTo(new RoomPosition(25, 25, roomToAttack), { reusePath: 2, maxOps: 5000 }) == ERR_NO_PATH) {
-                this.moveTo(new RoomPosition(25, 25, roomToAttack), { reusePath: 2, maxOps: 5000, ignoreDestructibleStructures: true });
-                return;
+            // if (this.fatigue == 0) { console.log(this.name + ', moving to ' + roomToAttack + ' to attack!'); }
+            if (this.moveTo(new RoomPosition(25, 25, roomToAttack), {}) == ERR_NO_PATH) {
+                this.moveTo(new RoomPosition(25, 25, roomToAttack), { ignoreDestructibleStructures: true });
             }
+            return;
         }
 
         if (Memory.roomsToClearWalls.length > 0) {
@@ -88,7 +91,7 @@ export default class DefenderCreep extends CustomCreep {
             }
         }
         if (roomToAttack.length == 0 && this.room.name != this.memory.spawnRoom) { //If there's nothing to attack go home
-            console.log(this.name + ' has nothing to do in this room. Going home');
+            // console.log(this.name + ' has nothing to do in this room. Going home');
             if (this.moveTo(new RoomPosition(25, 25, this.memory.spawnRoom), { reusePath: 2, maxOps: 5000 }) == ERR_NO_PATH) {
                 this.moveTo(new RoomPosition(25, 25, this.memory.spawnRoom), { reusePath: 2, maxOps: 5000, ignoreDestructibleStructures: true });
                 return;

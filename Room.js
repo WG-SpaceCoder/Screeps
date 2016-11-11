@@ -27,7 +27,7 @@ export default class CustomRoom extends Room {
         this.controller = room.controller; //Not sure why I have to do this. Was having issues with the controller beng set correctly
         Memory.Room[room.name].mostDamagedStructure = Util.getMostDamagedStructure(room.name); //Add most damaged structure to the room memory
         //If room being attacked notify all the defenders
-        if (this.find(FIND_HOSTILE_CREEPS).length > 0 && ('controller' in this) && this.name != 'E56N56') {
+        if (this.find(FIND_HOSTILE_CREEPS).length > 0) {
             Memory.roomBeingAttacked = this.name;
         } else if (Memory.roomBeingAttacked == this.name) {
             Memory.roomBeingAttacked = '';
@@ -36,21 +36,24 @@ export default class CustomRoom extends Room {
         //Work
         if (room.controller != undefined && room.controller._my && this.find(FIND_MY_SPAWNS).length > 0) { //If this is one of MY controlled rooms
             this.workTowers();
-            if (Game.time % 20 === 0) {
-                this.buildAroundSpawn(STRUCTURE_TOWER);
-                this.buildAroundSpawn(STRUCTURE_EXTENSION);
-            }
-            if (Game.time % 20 === 0) {
-                this.buildSourceContainers();
-            }
+            if (Game.time % 20 === 0) { this.buildAroundSpawn(STRUCTURE_TOWER); }
+            if (Game.time % 20 === 5) { this.buildAroundSpawn(STRUCTURE_EXTENSION); }
+            if (Game.time % 123 === 0) { this.buildRoads(); }
+            if (Game.time % 3 === 0) { this.workDrops(); }
+
         }
-        //If its a harvesting room
-        if ((Memory.roomsToHarvest.join(',') + Memory.roomsToAttack.join(',')).indexOf(room.name) != -1 && (room.controller.owner == undefined || room.controller.my)) {
-            // console.log('Found a room in roomstoharvest');
-            if (Game.time % 2 === 0) {
-                this.buildSourceContainers();
-            }
+
+        //If owned and no spawn, build one
+        if (room.controller != undefined && room.controller._my && this.find(FIND_MY_SPAWNS).length == 0) {
+            this.buildSpawn();
         }
+
+        // console.log(Util.getControlledRooms());
+
+        if (Util.getControlledRooms().includes(this.name) || Util.getMiningRooms().includes(this.name)) {
+            this.buildSourceContainers();
+        }
+
     }
 
 
@@ -73,7 +76,7 @@ export default class CustomRoom extends Room {
             var closestHostile = towers[tower].pos.findClosestByRange(FIND_HOSTILE_CREEPS);
             if (closestHostile) {
                 console.log('Closest hostile: ' + closestHostile);
-                towers[tower].attack(closestHostile);
+                console.log(towers[tower].attack(closestHostile));
                 continue;
             }
 
@@ -88,7 +91,7 @@ export default class CustomRoom extends Room {
             // console.log('Tower ' + towers[tower] + ' is at ' + (towers[tower].energy / towers[tower].energyCapacity) + ' capacity.');
             var mostDamagedStructure = Util.getMostDamagedStructure(this.name);
             if (mostDamagedStructure != undefined && (mostDamagedStructure.hits < 1000 || (mostDamagedStructure.structureType == STRUCTURE_CONTAINER && mostDamagedStructure.hits <= 5000))) {
-                console.log('mostDamagedStructure', mostDamagedStructure.structureType, mostDamagedStructure.hits);
+                // console.log('mostDamagedStructure', mostDamagedStructure.structureType, mostDamagedStructure.hits);
                 towers[tower].repair(mostDamagedStructure);
                 continue;
             }
@@ -147,6 +150,25 @@ export default class CustomRoom extends Room {
         }
     }
 
+    //Tells Miners to pick up energy off the floor/clean their room :p
+    workDrops() {
+        var drops = this.find(FIND_DROPPED_ENERGY);
+
+        for (var drop in drops) {
+            // console.log('drop:' + drops[drop].id + ' creeps: ' + _.filter(Game.creeps, (creep) => creep.memory.drop == drops[drop].id).length);
+            if (!_.filter(Game.creeps, (creep) => creep.memory.drop == drops[drop].id).length) {
+                var creep = drops[drop].pos.findClosestByRange(FIND_MY_CREEPS, { filter: (creep) => creep.memory.role == 'carrier' && creep.memory.state == 'gathering' && (creep.memory.drop == undefined || !creep.memory.drop.length) });
+                if (creep != undefined) {
+                    creep.memory.drop = drops[drop].id;
+                    // console.log('Found a creep (' + creep.name + ') to clean up in room: ' + this.name);
+                } else {
+                    // console.log('Could not find a creep to clean up in room: ' + this.name);
+                }
+            }
+
+        }
+    }
+
 
     //####################################################################################
     //########################################BUILD#######################################
@@ -155,10 +177,10 @@ export default class CustomRoom extends Room {
     //Builds roads between all spawns, controllers, towers, and sources
     buildRoads() {
         var built = false;
-        if (!Memory.hasOwnProperty('roads')) {
+        if (!Object.keys(Memory).includes('roads')) {
             Memory.roads = [];
         }
-        if (!Memory.hasOwnProperty('fullRoads')) {
+        if (!Object.keys(Memory).includes('fullRoads')) {
             Memory.fullRoads = [];
         }
         if (this.find(FIND_CONSTRUCTION_SITES, {
@@ -168,7 +190,7 @@ export default class CustomRoom extends Room {
         }
         var sources = this.find(FIND_SOURCES)
         var points = this.find(FIND_STRUCTURES, {
-            filter: (i) => (STRUCTURE_SPAWN + STRUCTURE_CONTROLLER + STRUCTURE_TOWER + STRUCTURE_RAMPART).indexOf(i.structureType) != -1
+            filter: (i) => (STRUCTURE_SPAWN + STRUCTURE_CONTROLLER + STRUCTURE_TOWER + STRUCTURE_RAMPART + STRUCTURE_EXTENSION).indexOf(i.structureType) != -1
         });
         // console.log('Need to build ' + points.length + ' roads.');
         points = points.concat(sources);
@@ -181,12 +203,14 @@ export default class CustomRoom extends Room {
                     point2 = points[point2];
                     // console.log('Points:', point1.toString(), point2.toString());
                     if (point1.toString() != point2.toString() && Memory.roads.indexOf(point1.toString() + point2.toString()) == -1) {
-                        var path = this.findPath(point1.pos, point2.pos, {
-                            ignoreCreeps: true
-                        });
-                        // console.log('Points:', point1.toString(), point2.toString());
+                        var path = PathFinder.search(point1.pos, point2.pos, {
+                            ignoreCreeps: true,
+                            plainCost: 1,
+                            swampCost: 1
+                        }).path;
+                        console.log('Points:', point1.toString(), point2.toString() + ' path: ' + path);
                         if (this.canBuildConstructionSitesByQuantity(path.length)) {
-                            // console.log('Building a road between ', point1, ' and ', point2);
+                            console.log('Building a road between ', point1, ' and ', point2);
                             Memory.roads.push(point1.toString() + point2.toString());
                             for (var spot in path) {
                                 spot = path[spot];
@@ -206,6 +230,72 @@ export default class CustomRoom extends Room {
             }
         }
         return false;
+    }
+
+    buildSpawn() {
+        if (this.find(FIND_CONSTRUCTION_SITES).length) {
+            return;
+        }
+        var sources = this.find(FIND_SOURCES);
+        var posList = [this.controller.pos];
+        var createdSpawn = false;
+        var maxX = 0;
+        var minX = 50;
+        var maxY = 0;
+        var minY = 50;
+
+        for (var source in sources) {
+            Array.prototype.push.apply(posList, [sources[source].pos]);
+        }
+        for (var posIndex in posList) {
+            var pos = posList[posIndex];
+            if (pos.x > maxX) { maxX = pos.x; }
+            if (pos.x < minX) { minX = pos.x; }
+            if (pos.y > maxY) { maxY = pos.y; }
+            if (pos.y < minY) { minY = pos.y; }
+        }
+
+        var currentPos = this.getPositionAt(Math.floor((maxX + minX) / 2), Math.floor((maxY + minY) / 2));
+        console.log('maxX: ' + maxX);
+        console.log('minX: ' + minX);
+        console.log('maxY: ' + maxY);
+        console.log('minY: ' + minY);
+        console.log('Middle point for spawn in room ' + this.name + ' is x: ' + currentPos.x + ' y: ' + currentPos.y);
+        var structure = STRUCTURE_SPAWN;
+        var spacesToCheck = 2;
+
+        while (!createdSpawn && currentPos.y >= 0 && currentPos.x <= 49) {
+            if (this.buildAtPos(currentPos, structure)) { //top right corner pos
+                return;
+            }
+            for (let i = 0; i < spacesToCheck; i++) { //go down
+                currentPos.y += 1;
+                if (this.buildAtPos(currentPos, structure)) {
+                    return;
+                }
+            }
+            for (let i = 0; i < spacesToCheck; i++) { //go left
+                currentPos.x -= 1;
+                if (this.buildAtPos(currentPos, structure)) {
+                    return;
+                }
+            }
+            for (let i = 0; i < spacesToCheck; i++) { //go up
+                currentPos.y -= 1;
+                if (this.buildAtPos(currentPos, structure)) {
+                    return;
+                }
+            }
+            for (let i = 0; i < spacesToCheck; i++) { //go right
+                currentPos.x += 1;
+                if (this.buildAtPos(currentPos, structure)) {
+                    return;
+                }
+            }
+            currentPos.y -= 1;
+            currentPos.x += 1;
+            spacesToCheck += 2;
+        }
     }
 
     //This will attempt to build structures in a spiral around spawn
@@ -337,6 +427,9 @@ export default class CustomRoom extends Room {
                 }
             }
         }
+
+        this.cleanSources();
+
         var sourcesWithoutContainers = this.find(FIND_SOURCES, {
             filter: (i) => _.map(Memory.sources.filter((i) => ('container' in i)), function(n) {
                 return n.id
@@ -388,6 +481,15 @@ export default class CustomRoom extends Room {
     //####################################################################################
     //########################################HELPERS#####################################
     //####################################################################################
+
+    cleanSources() {
+        var removed = _.remove(Memory.sources, function(source) {
+            // console.log(JSON.stringify(source));
+            return Game.getObjectById(source.id) == undefined || (source.container != undefined && source.container.id != undefined && Game.getObjectById(source.container.id) == undefined);
+        });
+
+        if (removed.length) { console.log('Removing sources: ' + removed); }
+    }
 
     getMostDamagedStructure() {
         var damagedStructures = this.find(FIND_STRUCTURES, { filter: (i) => i.hits != i.hitsMax });
@@ -443,16 +545,36 @@ export default class CustomRoom extends Room {
             for (let obj in objects) {
                 // console.log('there is a ' + objects[obj].type + ' at ' + x + ',' + y);
                 // console.log('structure: ' + objects[obj]);
-                if (objects[obj].structureType != STRUCTURE_ROAD) {
+                if (objects[obj].structureType != undefined && objects[obj].structureType != STRUCTURE_ROAD) {
+                    return false;
+                }
+                if (objects[obj].structureType == undefined) {
                     return false;
                 }
             }
+
             if (tmpAvailable) {
                 available = true;
                 // console.log('Space is available for ' + this.name + ' to harvest at ' + x + ',' + y);
             }
         }
-        return available;
+        searchSpots = [
+            [1, 1],
+            [-1, -1],
+            [1, -1],
+            [-1, 1]
+        ];
+
+        for (var i in searchSpots) {
+            newPos.y = pos.y + searchSpots[i][1];
+            newPos.x = pos.x + searchSpots[i][0];
+            // console.log('location: ' + x + ',' + y);
+            var objects = newPos.lookFor(LOOK_SOURCES);
+            if (objects.length) {
+                return false;
+            }
+            return available;
+        }
     }
 
     //(param) pos - the position to attempt the build at. structure - the structureType to attempt to build.
